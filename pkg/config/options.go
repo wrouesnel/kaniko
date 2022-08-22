@@ -48,6 +48,7 @@ type KanikoOptions struct {
 	RegistryOptions
 	CacheOptions
 	Destinations           multiArg
+	DestinationFiles       multiArg
 	BuildArgs              multiArg
 	Labels                 multiArg
 	Git                    KanikoGitOptions

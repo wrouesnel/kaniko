@@ -17,6 +17,7 @@ limitations under the License.
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -84,8 +85,32 @@ var RootCmd = &cobra.Command{
 				return err
 			}
 
+			// If a destination-file is specified, it should be merged with any command line values.
+			if len(opts.DestinationFiles) != 0 {
+				destinationDeduplication := map[string]struct{}{}
+				for _, destinationFile := range opts.DestinationFiles {
+					fileReader, err := os.Open(destinationFile)
+					if err != nil {
+						return errors.Wrap(err, "error reading destinations file")
+					}
+					scanner := bufio.NewScanner(fileReader)
+					for scanner.Scan() {
+						if len(scanner.Text()) != 0 {
+							destinationDeduplication[scanner.Text()] = struct{}{}
+						}
+					}
+				}
+				for _, destination := range opts.Destinations {
+					destinationDeduplication[destination] = struct{}{}
+				}
+				opts.Destinations = make([]string, 0, len(destinationDeduplication))
+				for destination, _ := range destinationDeduplication {
+					opts.Destinations = append(opts.Destinations, destination)
+				}
+			}
+
 			if !opts.NoPush && len(opts.Destinations) == 0 {
-				return errors.New("You must provide --destination, or use --no-push")
+				return errors.New("You must provide --destination, --destination-file, or use --no-push")
 			}
 			if err := cacheFlagsValid(); err != nil {
 				return errors.Wrap(err, "cache flags invalid")
@@ -97,10 +122,10 @@ var RootCmd = &cobra.Command{
 				return errors.Wrap(err, "error resolving dockerfile path")
 			}
 			if len(opts.Destinations) == 0 && opts.ImageNameDigestFile != "" {
-				return errors.New("You must provide --destination if setting ImageNameDigestFile")
+				return errors.New("You must provide --destination or --destination-file if setting ImageNameDigestFile")
 			}
 			if len(opts.Destinations) == 0 && opts.ImageNameTagDigestFile != "" {
-				return errors.New("You must provide --destination if setting ImageNameTagDigestFile")
+				return errors.New("You must provide --destination or --destination-file if setting ImageNameTagDigestFile")
 			}
 			// Update ignored paths
 			if opts.IgnoreVarRun {
@@ -184,6 +209,7 @@ func addKanikoOptionsFlags() {
 	RootCmd.PersistentFlags().StringVarP(&ctxSubPath, "context-sub-path", "", "", "Sub path within the given context.")
 	RootCmd.PersistentFlags().StringVarP(&opts.Bucket, "bucket", "b", "", "Name of the GCS bucket from which to access build context as tarball.")
 	RootCmd.PersistentFlags().VarP(&opts.Destinations, "destination", "d", "Registry the final image should be pushed to. Set it repeatedly for multiple destinations.")
+	RootCmd.PersistentFlags().VarP(&opts.DestinationFiles, "destination-file", "", "Filename to read a list of destinations the final image should be pushed to. Set it repeatedly for multiple filenames. Merged with --destination if it is also set.")
 	RootCmd.PersistentFlags().StringVarP(&opts.SnapshotMode, "snapshotMode", "", "full", "Change the file attributes inspected during snapshotting")
 	RootCmd.PersistentFlags().StringVarP(&opts.CustomPlatform, "customPlatform", "", "", "Specify the build platform if different from the current host")
 	RootCmd.PersistentFlags().VarP(&opts.BuildArgs, "build-arg", "", "This flag allows you to pass in ARG values at build time. Set it repeatedly for multiple values.")
